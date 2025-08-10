@@ -40,8 +40,6 @@ Target: OpenWrt latest stable release
 ```
 .
 ├── README.md
-├── UPGRADE_PROCESS.md        # Detailed update procedures
-├── README-tailscale-exit-node.md  # Tailscale VPN setup
 ├── scripts/
 │   ├── check_updates.sh     # Check for available updates
 │   ├── backup_all.sh        # Backup both routers
@@ -60,7 +58,10 @@ Target: OpenWrt latest stable release
 │   └── logs/
 │       └── update_[timestamp].log
 └── notes/
-    └── OpenWrt_Forum_Linksys_E8450-distilled.md  # Community knowledge base
+    ├── OpenWrt_Forum_Linksys_E8450-distilled.md  # Community knowledge base
+    ├── UPGRADE_PROCESS.md        # Detailed update procedures
+    ├── README-tailscale-exit-node.md  # Tailscale VPN setup
+    └── private-data-info.md     # Private data structure documentation
 ```
 
 ## Key Configuration Areas
@@ -156,7 +157,7 @@ ssh $DEVICE "sysupgrade -r /tmp/backup.tar.gz && reboot"
 4. Keep previous firmware file for rollback
 
 ### Monthly Maintenance Routine
-See [UPGRADE_PROCESS.md](UPGRADE_PROCESS.md#monthly-maintenance-routine) for detailed procedures:
+See [UPGRADE_PROCESS.md](notes/UPGRADE_PROCESS.md#monthly-maintenance-routine) for detailed procedures:
 - Package updates
 - Configuration backups
 - Log review
