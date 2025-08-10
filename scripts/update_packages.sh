@@ -3,7 +3,7 @@
 # update_packages.sh - Apply package updates to E8450 routers
 # Usage: ./update_packages.sh [router_name]
 #        ./update_packages.sh           # Interactive mode - prompts for each router
-#        ./update_packages.sh secondary-ap  # Update specific router
+#        ./update_packages.sh downstairs  # Update specific router
 #        ./update_packages.sh all       # Update all routers (with confirmation)
 
 set -e
@@ -15,11 +15,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Router configurations
-ROUTERS=("secondary-ap" "primary-ap")
-
 # Base directory (parent of scripts directory)
 BASE_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+
+# Load access point configuration
+source "${BASE_DIR}/scripts/lib/ap_functions.sh"
+check_ap_config"
 
 # Log file
 LOG_DIR="${BASE_DIR}/private/logs"
@@ -42,12 +43,18 @@ update_router() {
     
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}  Updating: $router${NC}"
+    
+    local role=$(get_ap_role "$router")
+    local desc=$(get_ap_description "$router")
+    if [ -n "$desc" ]; then
+        echo -e "${GREEN}  $desc${NC}"
+    fi
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     log_message "Starting update for $router"
     
     # Check router connectivity
-    if ! ping -c 1 -W 2 $(grep "Host $router" ~/.ssh/config -A 1 | grep HostName | awk '{print $2}') > /dev/null 2>&1; then
+    if ! test_ap_connectivity "$router"; then
         echo -e "  ${RED}Router $router is not reachable${NC}"
         log_message "Router $router is not reachable"
         return 1
@@ -55,7 +62,7 @@ update_router() {
     
     # Update package lists
     echo "  Updating package lists..."
-    if ! ssh $router "opkg update" > /dev/null 2>&1; then
+    if ! $(get_ap_ssh "$router") "opkg update" > /dev/null 2>&1; then
         echo -e "  ${RED}Failed to update package lists${NC}"
         log_message "Failed to update package lists on $router"
         return 1
@@ -63,7 +70,7 @@ update_router() {
     
     # Check for available updates
     echo "  Checking for updates..."
-    local updates=$(ssh $router "opkg list-upgradable" 2>/dev/null)
+    local updates=$($(get_ap_ssh "$router") "opkg list-upgradable" 2>/dev/null)
     local update_count=$(echo "$updates" | grep -c "^" || echo "0")
     
     if [ "$update_count" -eq 0 ]; then
@@ -95,9 +102,9 @@ update_router() {
     local backup_dir="${BASE_DIR}/private/device-data/${router}/backups"
     mkdir -p "$backup_dir"
     
-    if ssh $router "sysupgrade -b /tmp/pre_update_backup.tar.gz" 2>/dev/null; then
-        ssh $router "cat /tmp/pre_update_backup.tar.gz" > "${backup_dir}/pre_update_${timestamp}.tar.gz" 2>/dev/null
-        ssh $router "rm -f /tmp/pre_update_backup.tar.gz" 2>/dev/null
+    if $(get_ap_ssh "$router") "sysupgrade -b /tmp/pre_update_backup.tar.gz" 2>/dev/null; then
+        $(get_ap_ssh "$router") "cat /tmp/pre_update_backup.tar.gz" > "${backup_dir}/pre_update_${timestamp}.tar.gz" 2>/dev/null
+        $(get_ap_ssh "$router") "rm -f /tmp/pre_update_backup.tar.gz" 2>/dev/null
         echo -e "  ${GREEN}✓ Backup created${NC}"
     else
         echo -e "  ${YELLOW}⚠ Backup failed, but continuing...${NC}"
@@ -112,7 +119,7 @@ update_router() {
     local packages=$(echo "$updates" | awk '{print $1}')
     
     # Upgrade packages
-    if ssh $router "opkg upgrade $packages" 2>&1 | tee -a "$LOG_FILE"; then
+    if $(get_ap_ssh "$router") "opkg upgrade $packages" 2>&1 | tee -a "$LOG_FILE"; then
         echo -e "  ${GREEN}✓ Updates applied successfully${NC}"
         log_message "Updates completed successfully for $router"
     else
@@ -125,26 +132,26 @@ update_router() {
     
     # Check if uhttpd was updated
     if echo "$updates" | grep -q "uhttpd"; then
-        ssh $router "/etc/init.d/uhttpd restart" 2>/dev/null
+        $(get_ap_ssh "$router") "/etc/init.d/uhttpd restart" 2>/dev/null
         echo "    ✓ Web server restarted"
     fi
     
     # Check if rpcd was updated
     if echo "$updates" | grep -q "rpcd"; then
-        ssh $router "/etc/init.d/rpcd restart" 2>/dev/null
+        $(get_ap_ssh "$router") "/etc/init.d/rpcd restart" 2>/dev/null
         echo "    ✓ RPC daemon restarted"
     fi
     
     # Check if dnsmasq was updated
     if echo "$updates" | grep -q "dnsmasq"; then
-        ssh $router "/etc/init.d/dnsmasq restart" 2>/dev/null
+        $(get_ap_ssh "$router") "/etc/init.d/dnsmasq restart" 2>/dev/null
         echo "    ✓ DNS/DHCP server restarted"
     fi
     
     # Check system status
     echo "  Verifying system status..."
-    local uptime=$(ssh $router "uptime | awk -F'up' '{print \$2}' | awk -F',' '{print \$1}'" 2>/dev/null)
-    local mem_free=$(ssh $router "free -m | grep Mem | awk '{print \$4}'" 2>/dev/null)
+    local uptime=$($(get_ap_ssh "$router") "uptime | awk -F'up' '{print \$2}' | awk -F',' '{print \$1}'" 2>/dev/null)
+    local mem_free=$($(get_ap_ssh "$router") "free -m | grep Mem | awk '{print \$4}'" 2>/dev/null)
     
     echo "    Uptime: $uptime"
     echo "    Free memory: ${mem_free}MB"
@@ -158,9 +165,15 @@ update_router() {
 # Main execution
 TARGET="$1"
 
+# Get list of all routers
+ROUTERS=($(list_all_aps))
+
 # Determine which routers to update
 if [ -z "$TARGET" ]; then
-    # Interactive mode - ask for each router
+    # Interactive mode - ask for each router in update order
+    if [ ${#UPDATE_ORDER[@]} -gt 0 ]; then
+        ROUTERS=("${UPDATE_ORDER[@]}")
+    fi
     for router in "${ROUTERS[@]}"; do
         echo -n "Update $router? (y/N): "
         read -r response
@@ -173,22 +186,42 @@ if [ -z "$TARGET" ]; then
         fi
     done
 elif [ "$TARGET" = "all" ]; then
-    # Update all routers
+    # Update all routers in configured order
     echo -e "${YELLOW}Warning: This will update all routers.${NC}"
     echo -n "Continue? (y/N): "
     read -r response
     if [[ "$response" =~ ^[Yy]$ ]]; then
-        # Always update secondary-ap first (test router)
-        update_router "secondary-ap"
-        echo
-        echo -e "${YELLOW}Please test secondary-ap before continuing.${NC}"
-        echo -n "Continue with primary-ap? (y/N): "
-        read -r response
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            update_router "primary-ap"
+        # Use update order if configured
+        if [ ${#UPDATE_ORDER[@]} -gt 0 ]; then
+            ROUTERS_TO_UPDATE=("${UPDATE_ORDER[@]}")
+        else
+            # Default: secondaries first, then primary
+            ROUTERS_TO_UPDATE=($(list_by_role "secondary"))
+            ROUTERS_TO_UPDATE+=($(list_by_role "primary"))
         fi
+        
+        # Update each router with confirmation between primary and secondary
+        local last_role=""
+        for router in "${ROUTERS_TO_UPDATE[@]}"; do
+            local current_role=$(get_ap_role "$router")
+            
+            # If switching from secondary to primary, ask for confirmation
+            if [ "$last_role" = "secondary" ] && [ "$current_role" = "primary" ]; then
+                echo
+                echo -e "${YELLOW}Secondaries updated. Please test before continuing.${NC}"
+                echo -n "Continue with primary routers? (y/N): "
+                read -r response
+                if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                    break
+                fi
+            fi
+            
+            update_router "$router"
+            echo
+            last_role="$current_role"
+        done
     fi
-elif [[ " ${ROUTERS[@]} " =~ " ${TARGET} " ]]; then
+elif ap_exists "$TARGET"; then
     # Update specific router
     update_router "$TARGET"
 else

@@ -114,6 +114,72 @@ for link in device-data binaries old-backups logs; do
 done
 
 echo
+echo -e "${BLUE}Checking access points configuration...${NC}"
+
+# Check and create accesspoints.conf if it doesn't exist
+AP_CONFIG="$PRIVATE_REPO_PATH/device-data/accesspoints.conf"
+if [ ! -f "$AP_CONFIG" ]; then
+    echo -e "${YELLOW}Creating access points configuration template...${NC}"
+    cat > "$AP_CONFIG" << 'EOF'
+#!/bin/bash
+# Access Points Configuration File
+# 
+# IMPORTANT: Replace these example entries with your actual access points!
+# 
+# Format: "name:role:ip:user:port:description"
+#   name        - Friendly name for the access point (no spaces)
+#   role        - Either "primary" (main gateway) or "secondary" (mesh/WDS nodes)
+#   ip          - IP address of the access point
+#   user        - SSH username (usually "root" for OpenWrt)
+#   port        - SSH port (usually 22)
+#   description - Optional description of the access point
+#
+# Example network with 3 access points:
+#   - Main router downstairs (primary gateway)
+#   - Upstairs extension (secondary via WDS)
+#   - Garage access point (secondary via WDS)
+
+# Define your access points here
+ACCESS_POINTS=(
+  # REPLACE THESE WITH YOUR ACTUAL ACCESS POINTS:
+  "primary-ap:primary:192.168.1.1:root:22:Main gateway router"
+  "secondary-ap:secondary:192.168.1.2:root:22:Secondary access point"
+  # Add more access points as needed:
+  # "garage-ap:secondary:192.168.1.3:root:22:Garage access point"
+  # "guest-house:secondary:192.168.1.4:root:22:Guest house AP"
+)
+
+# Update order - which routers to update first
+# Best practice: Update secondary/test routers first, primary last
+UPDATE_ORDER=("secondary-ap" "primary-ap")
+# If you have multiple secondaries, list them before the primary:
+# UPDATE_ORDER=("upstairs" "garage" "guest-house" "downstairs")
+
+# Configuration settings
+BACKUP_RETENTION=10        # Number of backups to keep per router
+SSH_TIMEOUT=5             # SSH connection timeout in seconds
+DEFAULT_USER="root"       # Default SSH user if not specified in ACCESS_POINTS
+DEFAULT_PORT="22"         # Default SSH port if not specified in ACCESS_POINTS
+
+# SSH Options (used by all scripts)
+SSH_OPTIONS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=${SSH_TIMEOUT}"
+EOF
+    echo -e "  ${GREEN}✓${NC} Created template: device-data/accesspoints.conf"
+    echo
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  IMPORTANT: Configure your access points!${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "  Edit the configuration file:"
+    echo -e "    ${BLUE}private/device-data/accesspoints.conf${NC}"
+    echo
+    echo "  Replace the example entries with your actual routers."
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo
+else
+    echo -e "  ${GREEN}✓${NC} Access points configuration already exists"
+fi
+
+echo
 echo -e "${GREEN}Private data setup complete!${NC}"
 echo
 echo "Your repository structure:"
@@ -126,4 +192,9 @@ echo "  private/binaries → $PRIVATE_REPO_PATH/firmware"
 echo "  private/old-backups → $PRIVATE_REPO_PATH/historical-backups"
 echo "  private/logs → $PRIVATE_REPO_PATH/logs"
 echo
+if [ ! -f "$AP_CONFIG" ] || grep -q "192.168.1.1" "$AP_CONFIG" 2>/dev/null; then
+    echo -e "${YELLOW}Next step: Configure your access points in:${NC}"
+    echo -e "  ${BLUE}private/device-data/accesspoints.conf${NC}"
+    echo
+fi
 echo -e "${YELLOW}Note: The private directory is in .gitignore and won't be committed.${NC}"

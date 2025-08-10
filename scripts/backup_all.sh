@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# backup_all.sh - Create configuration backups for both E8450 routers
-# Usage: ./backup_all.sh
+# backup_all.sh - Create configuration backups for E8450 routers
+# Usage: ./backup_all.sh [router_name|--role role|--all]
+#        ./backup_all.sh                  # Backup all routers
+#        ./backup_all.sh downstairs       # Backup specific router
+#        ./backup_all.sh --role secondary # Backup all secondary APs
+#        ./backup_all.sh --list           # List configured routers
 
 set -e
 
@@ -12,11 +16,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Router configurations
-ROUTERS=("secondary-ap" "primary-ap")
-
 # Base directory (parent of scripts directory)
 BASE_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+
+# Load access point configuration
+source "${BASE_DIR}/scripts/lib/ap_functions.sh"
+check_ap_config
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}     OpenWrt E8450 Backup Tool - $(date +%Y-%m-%d)${NC}"
@@ -37,25 +42,34 @@ backup_router() {
     # Create backup directory if it doesn't exist
     mkdir -p "$backup_dir"
     
+    # Get router details
+    local role=$(get_ap_role "$router")
+    local desc=$(get_ap_description "$router")
+    if [ -n "$desc" ]; then
+        echo "  Description: $desc"
+    fi
+    echo "  Role: $role"
+    
     # Check router connectivity
-    if ! ping -c 1 -W 2 $(grep "Host $router" ~/.ssh/config -A 1 | grep HostName | awk '{print $2}') > /dev/null 2>&1; then
+    if ! test_ap_connectivity "$router"; then
         echo -e "  ${RED}Router $router is not reachable${NC}"
         return 1
     fi
     
     # Create backup
     echo "  Creating configuration backup..."
-    if ssh $router "sysupgrade -b /tmp/backup_temp.tar.gz" 2>/dev/null; then
+    local ssh_cmd=$(get_ap_ssh "$router")
+    if $ssh_cmd "sysupgrade -b /tmp/backup_temp.tar.gz" 2>/dev/null; then
         # Transfer backup file
         echo "  Transferring backup file..."
-        if ssh $router "cat /tmp/backup_temp.tar.gz" > "$backup_file" 2>/dev/null; then
+        if $ssh_cmd "cat /tmp/backup_temp.tar.gz" > "$backup_file" 2>/dev/null; then
             # Clean up temp file on router
-            ssh $router "rm -f /tmp/backup_temp.tar.gz" 2>/dev/null
+            $ssh_cmd "rm -f /tmp/backup_temp.tar.gz" 2>/dev/null
             
             # Verify backup file
             if [ -f "$backup_file" ]; then
                 local size=$(ls -lh "$backup_file" | awk '{print $5}')
-                echo -e "  ${GREEN}✓ Backup created successfully${NC}"
+                echo -e "  ${GREEN}[OK] Backup created successfully${NC}"
                 echo "    File: $backup_file"
                 echo "    Size: $size"
                 
@@ -65,10 +79,10 @@ backup_router() {
                 
                 echo "  Backing up individual config files..."
                 for config in network wireless firewall dhcp system; do
-                    if ssh $router "uci export $config" > "${config_dir}/${config}" 2>/dev/null; then
-                        echo "    ✓ $config"
+                    if $ssh_cmd "uci export $config" > "${config_dir}/${config}" 2>/dev/null; then
+                        echo "    [OK] $config"
                     else
-                        echo "    ✗ $config (failed)"
+                        echo "    [FAIL] $config"
                     fi
                 done
                 
@@ -79,7 +93,7 @@ backup_router() {
             fi
         else
             echo -e "  ${RED}Failed to transfer backup${NC}"
-            ssh $router "rm -f /tmp/backup_temp.tar.gz" 2>/dev/null
+            $ssh_cmd "rm -f /tmp/backup_temp.tar.gz" 2>/dev/null
             return 1
         fi
     else
@@ -104,11 +118,48 @@ clean_old_backups() {
     fi
 }
 
+# Parse command line arguments
+TARGET="$1"
+ROUTERS_TO_BACKUP=()
+
+# Determine which routers to backup
+if [ "$TARGET" = "--list" ]; then
+    echo -e "${BLUE}Configured Access Points:${NC}"
+    for ap in $(list_all_aps); do
+        show_ap_info "$ap"
+        echo
+    done
+    exit 0
+elif [ "$TARGET" = "--role" ]; then
+    ROLE="$2"
+    if [ -z "$ROLE" ]; then
+        echo -e "${RED}Error: --role requires a role name (primary/secondary)${NC}"
+        exit 1
+    fi
+    ROUTERS_TO_BACKUP=($(list_by_role "$ROLE"))
+    if [ ${#ROUTERS_TO_BACKUP[@]} -eq 0 ]; then
+        echo -e "${RED}No routers found with role: $ROLE${NC}"
+        exit 1
+    fi
+    echo -e "${BLUE}Backing up all $ROLE routers: ${ROUTERS_TO_BACKUP[*]}${NC}"
+elif [ -n "$TARGET" ] && [ "$TARGET" != "--all" ]; then
+    # Specific router requested
+    if ! ap_exists "$TARGET"; then
+        echo -e "${RED}Router '$TARGET' not found in configuration${NC}"
+        echo "Available routers: $(list_all_aps)"
+        exit 1
+    fi
+    ROUTERS_TO_BACKUP=("$TARGET")
+else
+    # Backup all routers (default or --all)
+    ROUTERS_TO_BACKUP=($(list_all_aps))
+fi
+
 # Main execution
 SUCCESS_COUNT=0
 FAIL_COUNT=0
 
-for router in "${ROUTERS[@]}"; do
+for router in "${ROUTERS_TO_BACKUP[@]}"; do
     if backup_router "$router"; then
         clean_old_backups "$router"
         ((SUCCESS_COUNT++))
@@ -123,7 +174,7 @@ echo -e "${BLUE}═════════════════════�
 echo -e "${BLUE}                        SUMMARY${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 
-if [ "$SUCCESS_COUNT" -eq "${#ROUTERS[@]}" ]; then
+if [ "$SUCCESS_COUNT" -eq "${#ROUTERS_TO_BACKUP[@]}" ]; then
     echo -e "  ${GREEN}All routers backed up successfully!${NC}"
 else
     echo -e "  ${GREEN}Successful: $SUCCESS_COUNT${NC}"
@@ -132,7 +183,7 @@ fi
 
 echo
 echo -e "${BLUE}Backup locations:${NC}"
-for router in "${ROUTERS[@]}"; do
+for router in "${ROUTERS_TO_BACKUP[@]}"; do
     backup_dir="${BASE_DIR}/private/device-data/${router}/backups"
     if [ -d "$backup_dir" ]; then
         latest=$(ls -1t "$backup_dir"/backup_*.tar.gz 2>/dev/null | head -1)
