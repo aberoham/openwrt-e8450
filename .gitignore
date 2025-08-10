@@ -1,0 +1,36 @@
+
+# Private data directory (contains all sensitive data)
+private/device-data
+private/binaries
+private/old-backups
+private/logs
+
+# Backup files
+*.tar.gz
+*.tar
+
+# Logs
+*.log
+
+# SSH keys and certificates
+*.key
+*.pem
+*.crt
+id_rsa*
+id_ed25519*
+
+# Config backups with potential secrets
+*_backup.tar.gz
+pre_update_*.tar.gz
+
+# System files
+.DS_Store
+*.swp
+*.swo
+*~
+.*.sw?
+
+# Temporary files
+tmp/
+temp/
+*.tmp
