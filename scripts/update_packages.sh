@@ -20,7 +20,7 @@ BASE_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
 
 # Load access point configuration
 source "${BASE_DIR}/scripts/lib/ap_functions.sh"
-check_ap_config"
+check_ap_config
 
 # Log file
 LOG_DIR="${BASE_DIR}/private/logs"
@@ -70,8 +70,10 @@ update_router() {
     
     # Check for available updates
     echo "  Checking for updates..."
-    local updates=$($(get_ap_ssh "$router") "opkg list-upgradable" 2>/dev/null)
-    local update_count=$(echo "$updates" | grep -c "^" || echo "0")
+    local updates
+    updates="$($(get_ap_ssh "$router") opkg list-upgradable 2>/dev/null)"
+    local update_count
+    update_count=$(echo "$updates" | grep -c "^" || echo "0")
     
     if [ "$update_count" -eq 0 ]; then
         echo -e "  ${GREEN}No package updates available${NC}"
