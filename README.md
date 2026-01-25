@@ -35,6 +35,15 @@ Target: OpenWrt 24.10.x stable
 ./scripts/update_packages.sh primary-ap    # Then production
 ```
 
+### Deploy Tailscale (Exit Node + Subnet Routing)
+```bash
+./scripts/deploy_tailscale.sh --list       # Show available routers
+./scripts/deploy_tailscale.sh <router>     # Deploy to router
+# Then SSH and run: tailscale up --advertise-exit-node --advertise-routes=<lan_subnet>
+```
+
+See [tailscale-setup.md](notes/tailscale-setup.md) for complete setup guide.
+
 ## Directory Structure
 
 ```
@@ -44,7 +53,9 @@ Target: OpenWrt 24.10.x stable
 ├── scripts/
 │   ├── check_updates.sh     # Check for available updates
 │   ├── backup_all.sh        # Backup both routers
-│   └── update_packages.sh   # Apply package updates
+│   ├── update_packages.sh   # Apply package updates
+│   ├── deploy_tailscale.sh  # Deploy Tailscale with firewall config
+│   └── remove_tailscale.sh  # Remove Tailscale cleanly
 ├── private/                  # Private data (symlinked)
 │   ├── setup-private-data.sh # Setup script for symlinks
 │   ├── device-data/
@@ -62,7 +73,7 @@ Target: OpenWrt 24.10.x stable
     ├── OpenWrt_Forum_Linksys_E8450-distilled.md  # Community knowledge base
     ├── UPGRADE_PROCESS.md        # Detailed update procedures
     ├── flash-layout-v2-upgrade.md   # Flash layout v1.0→v2.0 migration
-    ├── README-tailscale-exit-node.md  # Tailscale VPN setup
+    ├── tailscale-setup.md        # Tailscale exit node and subnet routing
     └── private-data-info.md     # Private data structure documentation
 ```
 
@@ -91,6 +102,7 @@ Based on 4+ years of community experience from the OpenWrt forums (see [distille
 - **Channel Selection**: Use non-DFS channels (36-48, 149-165), 80MHz width recommended
 
 ### Popular Add-ons
+- **Tailscale**: Exit node + subnet routing for secure remote access (~50-70MB RAM). See [setup guide](notes/tailscale-setup.md)
 - Network-wide VPN (WireGuard ~200Mbps, OpenVPN ~50Mbps)
 - Home automation hub (MQTT, Zigbee2MQTT)
 - Network monitoring (Netdata, vnstat, nlbwmon)
@@ -238,6 +250,27 @@ dmesg       # Kernel messages
 - Keep firmware and packages updated
 - Consider network segmentation for IoT devices
 - Enable firewall logging for suspicious activity monitoring
+
+### Firewall Hardening
+
+Default OpenWrt firewall includes some rules that can be safely removed:
+
+```bash
+# Remove unused IPSec rules (if not using IPSec VPN)
+uci show firewall | grep -n 'Allow-IPSec-ESP\|Allow-ISAKMP'
+# Delete matching rule numbers, e.g.:
+uci delete firewall.@rule[10]  # ISAKMP
+uci delete firewall.@rule[9]   # IPSec-ESP
+uci commit firewall && /etc/init.d/firewall reload
+```
+
+SSH security recommendations:
+- Bind SSH to LAN interface only: `uci set dropbear.@dropbear[0].Interface='lan'`
+- Disable password auth (use keys): `uci set dropbear.@dropbear[0].PasswordAuth='off'`
+
+The web UI (uhttpd) is protected from WAN access by:
+1. Firewall: WAN zone has `input=REJECT` with no port 80/443 rules
+2. Application: `rfc1918_filter=1` blocks non-private source IPs
 
 ## Resources & Documentation
 
