@@ -10,6 +10,7 @@ This is an open public repository. **Never commit private deployment details:**
 - No Tailscale auth keys or tokens
 - No SSH keys or credentials
 - Private data belongs in `private/` directory (symlinked to separate private repo)
+- **Claude Code**: Check `private/device-data/accesspoints.conf` for actual device IPs and configuration
 
 ## Key Files
 

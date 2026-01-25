@@ -43,12 +43,16 @@ if [ ! -d "$PRIVATE_REPO_PATH" ]; then
             ;;
         2)
             echo -e "${BLUE}Creating new private data structure...${NC}"
-            mkdir -p "$PRIVATE_REPO_PATH"/{device-data/{primary-ap,secondary-ap}/{backups,config},firmware/{boot-backup,releases,installers},historical-backups,logs}
+            # Create base directory structure only
+            # Router-specific directories (device-data/{name}/backups, etc.) are created
+            # automatically by backup scripts based on names in accesspoints.conf
+            mkdir -p "$PRIVATE_REPO_PATH"/{device-data,firmware/{boot-backup,releases,installers},historical-backups,logs}
             echo "# OpenWrt E8450 Private Data" > "$PRIVATE_REPO_PATH/README.md"
             echo -e "${GREEN}✓ Private data structure created${NC}"
             echo
-            echo "You can now place your configuration files in:"
-            echo "  $PRIVATE_REPO_PATH"
+            echo "Next steps:"
+            echo "  1. Configure your access points in device-data/accesspoints.conf"
+            echo "  2. Run backup scripts - they will create router directories automatically"
             ;;
         3)
             echo "Exiting..."
@@ -140,20 +144,22 @@ if [ ! -f "$AP_CONFIG" ]; then
 #   - Garage access point (secondary via WDS)
 
 # Define your access points here
+# Use meaningful names for your network (e.g., "downstairs", "office", "garage")
+# These names will be used to create backup directories automatically
 ACCESS_POINTS=(
-  # REPLACE THESE WITH YOUR ACTUAL ACCESS POINTS:
-  "primary-ap:primary:192.168.1.1:root:22:Main gateway router"
-  "secondary-ap:secondary:192.168.1.2:root:22:Secondary access point"
+  # REPLACE THESE EXAMPLES WITH YOUR ACTUAL ACCESS POINTS:
+  "downstairs:primary:192.168.1.1:root:22:Main gateway router"
+  "upstairs:secondary:192.168.1.2:root:22:Upstairs access point"
   # Add more access points as needed:
-  # "garage-ap:secondary:192.168.1.3:root:22:Garage access point"
-  # "guest-house:secondary:192.168.1.4:root:22:Guest house AP"
+  # "garage:secondary:192.168.1.3:root:22:Garage access point"
+  # "office:secondary:192.168.1.4:root:22:Home office AP"
 )
 
 # Update order - which routers to update first
 # Best practice: Update secondary/test routers first, primary last
-UPDATE_ORDER=("secondary-ap" "primary-ap")
+UPDATE_ORDER=("upstairs" "downstairs")
 # If you have multiple secondaries, list them before the primary:
-# UPDATE_ORDER=("upstairs" "garage" "guest-house" "downstairs")
+# UPDATE_ORDER=("upstairs" "garage" "office" "downstairs")
 
 # Configuration settings
 BACKUP_RETENTION=10        # Number of backups to keep per router
