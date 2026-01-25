@@ -13,9 +13,9 @@ Automated management system for Linksys E8450 (UBI) routers running OpenWrt 24.1
 ## Network Architecture
 
 - **primary-ap** (192.168.1.1): Primary gateway, DHCP server, firewall
-- **secondary-ap** (192.168.1.2): Network extension via WDS wireless backhaul
+- **secondary-ap** (192.168.1.2): Wireless extender via WDS backhaul
 
-Target: OpenWrt latest stable release
+Target: OpenWrt 24.10.x stable
 
 ## Quick Start Guide
 
@@ -40,6 +40,7 @@ Target: OpenWrt latest stable release
 ```
 .
 ├── README.md
+├── changelog.txt
 ├── scripts/
 │   ├── check_updates.sh     # Check for available updates
 │   ├── backup_all.sh        # Backup both routers
@@ -60,6 +61,7 @@ Target: OpenWrt latest stable release
 └── notes/
     ├── OpenWrt_Forum_Linksys_E8450-distilled.md  # Community knowledge base
     ├── UPGRADE_PROCESS.md        # Detailed update procedures
+    ├── flash-layout-v2-upgrade.md   # Flash layout v1.0→v2.0 migration
     ├── README-tailscale-exit-node.md  # Tailscale VPN setup
     └── private-data-info.md     # Private data structure documentation
 ```
@@ -69,7 +71,7 @@ Target: OpenWrt latest stable release
 Based on 4+ years of community experience from the OpenWrt forums (see [distilled notes](notes/OpenWrt_Forum_Linksys_E8450-distilled.md)):
 
 ### Critical Issues & Solutions
-- **Reboot to Recovery Loop**: Device boots into recovery mode after crash - perform cold boot (30s power off) to clear pstore logs
+- **Reboot to Recovery Loop**: Device boots into recovery mode after crash due to pstore panic records. Fix with `rm -f /sys/fs/pstore/*` then reboot, or cold boot (30s power off)
 - **I/O Errors on mtdblock2**: Harmless ECC errors from factory partition - can be safely ignored
 - **Maximum Stability Tips**: Enable IRQBalance, avoid 802.11r with Apple devices, disable hardware flow offloading
 
@@ -102,13 +104,11 @@ Add to `~/.ssh/config`:
 Host primary-ap
     HostName 192.168.1.1
     User root
-    Port 22
     StrictHostKeyChecking accept-new
 
 Host secondary-ap
     HostName 192.168.1.2
     User root
-    Port 22
     StrictHostKeyChecking accept-new
 ```
 
@@ -117,8 +117,10 @@ Host secondary-ap
 **WARNING**: The E8450 UBI variant requires special handling:
 - Never use non-UBI firmware on UBI devices
 - Always use sysupgrade images, not factory images
-- The device uses a special bootloader (U-Boot 2022.x with UBI support)
+- The device uses U-Boot 2024.10 with UBI support
 - Power loss during upgrade can brick the device - use UPS if possible
+
+**Flash Layout Migration**: Devices on layout v1.0 cannot sysupgrade to 24.10.5+. You must first flash the [UBI installer v1.1.4+](https://github.com/dangowrt/owrt-ubi-installer/releases) to migrate to layout v2.0. See [flash-layout-v2-upgrade.md](notes/flash-layout-v2-upgrade.md) for the full procedure.
 
 ## Backup & Recovery
 
@@ -164,9 +166,8 @@ See [UPGRADE_PROCESS.md](notes/UPGRADE_PROCESS.md#monthly-maintenance-routine) f
 - Performance monitoring
 
 ### Recommended Stable Releases
+- **24.10.5**: Current stable, requires flash layout v2.0
 - **23.05.5**: Most stable overall, excellent for production
-- **22.03.7**: Rock-solid but lacks newer features
-- **24.10.2**: Current stable with good stability after bug fixes
 - Avoid .0 releases and snapshots for production use
 
 ## Monitoring & Health Checks

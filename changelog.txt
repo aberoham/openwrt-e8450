@@ -1,0 +1,17 @@
+OpenWrt E8450 Fleet Management - Changelog
+==========================================
+
+Flash Layout v2.0 Migration Guide Added
+---------------------------------------
+- Added notes/flash-layout-v2-upgrade.md documenting the upgrade from
+  flash layout v1.0 to v2.0, required for OpenWrt 24.10.5+
+- Covers UBI installer flashing, pstore recovery loop fix, and post-upgrade steps
+- Updated README with flash layout migration warning
+
+See notes/flash-layout-v2-upgrade.md for full procedure.
+
+---
+
+Previous Changes
+----------------
+See git history for changes prior to this changelog.
