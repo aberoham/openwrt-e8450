@@ -1,6 +1,24 @@
 OpenWrt E8450 Fleet Management - Changelog
 ==========================================
 
+2026-03-31: Firmware Upgrade 24.10.5 → 24.10.6
+------------------------------------------------
+- Upgraded downstairs AP from OpenWrt 24.10.5 (kernel 6.6.119) to 24.10.6 (kernel 6.6.127)
+- Upgraded upstairs AP from OpenWrt 24.10.5 to 24.10.6
+- Key fixes in 24.10.6: umdns stack overflows (CVE-2026-30871/30872),
+  LuCI XSS (CVE-2026-32721), procd PATH bypass (CVE-2026-30874),
+  OpenSSL 3.0.18 → 3.0.19
+- Kernel 6.6.119 → 6.6.127 (may address crash that caused pstore recovery boot)
+
+2026-03-31: Downstairs AP Recovery from pstore Recovery Boot
+------------------------------------------------------------
+- Downstairs router kernel-crashed on 2026-03-20 ~17:09
+- U-Boot pstore check detected crash data → auto-booted recovery initramfs
+- Recovery mode runs from RAM with no overlay (default config, 192.168.1.1)
+- All config/overlay data was intact on rootfs_data (UBIFS volume 7)
+- Fix: cleared pstore entries, rebooted → normal production boot restored
+- Crash logs saved to private/logs/crash-2026-03-20/
+
 Flash Layout v2.0 Migration Guide Added
 ---------------------------------------
 - Added notes/flash-layout-v2-upgrade.md documenting the upgrade from
