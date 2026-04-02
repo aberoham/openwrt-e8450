@@ -1,6 +1,17 @@
 OpenWrt E8450 Fleet Management - Changelog
 ==========================================
 
+2026-04-02: Major Upgrade to OpenWrt 25.12.2
+---------------------------------------------
+- Upgraded both APs from OpenWrt 24.10.6 to 25.12.2
+- Kernel 6.6.127 → 6.12.74
+- Tailscale 1.80.3 → 1.94.1 (Go 1.23 → Go 1.26)
+- Package manager changed from opkg to apk
+- Motivation: unblock Tailscale past 1.80.3 (24.10 Go version wall)
+  and address likely cause of March 20 kernel crash
+- See notes/tailscale-custom-build.md for research on the Go/Tailscale
+  version constraint and custom build plan
+
 2026-03-31: Firmware Upgrade 24.10.5 → 24.10.6
 ------------------------------------------------
 - Upgraded downstairs AP from OpenWrt 24.10.5 (kernel 6.6.119) to 24.10.6 (kernel 6.6.127)
