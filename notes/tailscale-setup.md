@@ -147,6 +147,58 @@ ping 192.168.1.x      # Other LAN devices
 
 3. Alternative: Use [GuNanOvO's package feed](https://gunanovo.github.io/openwrt-tailscale/) which provides pre-built nftables-compatible binaries.
 
+### Exit Node DNS Not Working
+
+**Symptom**: Exit node connects and routes traffic, but DNS fails on the client.
+`tailscale status` shows "Tailscale can't reach the configured DNS servers."
+
+**Cause**: Tailscale's `directManager` has no OpenWrt awareness and may clobber
+`/etc/resolv.conf` (replacing the symlink with a regular file). When `accept-dns`
+is later disabled, the restore can fail, leaving an empty file. The PeerAPI DNS
+handler reads `/etc/resolv.conf` to find upstream nameservers for exit node clients.
+
+**Solution**:
+```bash
+# Verify the problem
+ls -la /etc/resolv.conf   # Should be a symlink, not a regular file
+cat /etc/resolv.conf       # Should contain nameserver 127.0.0.1
+
+# Fix: restore the symlink
+rm /etc/resolv.conf
+ln -sf /tmp/resolv.conf /etc/resolv.conf
+/etc/init.d/tailscale restart
+
+# Verify
+tailscale status  # Health warning should be gone
+```
+
+See [tailscale-exit-node-dns-fix.md](tailscale-exit-node-dns-fix.md) for full details.
+
+### Exit Node IPv6 Not Working
+
+**Symptom**: IPv4 works through the exit node but IPv6 does not.
+
+**Cause**: OpenWrt's DHCPv6 default routes are source-constrained (e.g.,
+`default from 2a10:.../48`). Tailscale traffic has ULA source addresses
+(`fd7a:...`) that don't match, so packets have no route and get dropped before
+reaching the firewall.
+
+**Solution**: Add a routing table with an unrestricted default route, scoped to
+tailscale0 traffic:
+
+```bash
+# Get current gateway
+GW=$(ip -6 route show default | head -1 | awk '{print $3}')
+DEV=$(ip -6 route show default | head -1 | awk '{print $5}')
+
+# Add route and rule
+ip -6 route add default via "$GW" dev "$DEV" table 100
+ip -6 rule add iif tailscale0 lookup 100 priority 5269
+```
+
+For persistence, install the hotplug script at `/etc/hotplug.d/iface/99-tailscale-ipv6`
+(see [tailscale-exit-node-dns-fix.md](tailscale-exit-node-dns-fix.md)).
+
 ### Exit Node Not Working
 
 1. Check IP forwarding:

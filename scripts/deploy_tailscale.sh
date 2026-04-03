@@ -217,6 +217,70 @@ configure_firewall() {
     return 0
 }
 
+# Fix /etc/resolv.conf for Tailscale DNS compatibility
+# Tailscale's directManager has no OpenWrt awareness and may replace the
+# resolv.conf symlink with a regular file, breaking PeerAPI DNS for exit node
+# clients. Ensure the standard symlink exists.
+fix_resolv_conf() {
+    local ssh_cmd=$1
+
+    echo -e "${YELLOW}Checking /etc/resolv.conf...${NC}"
+
+    local is_symlink=$($ssh_cmd "[ -L /etc/resolv.conf ] && echo yes || echo no")
+
+    if [ "$is_symlink" = "yes" ]; then
+        echo -e "  ${GREEN}[OK] /etc/resolv.conf is a symlink${NC}"
+        return 0
+    fi
+
+    echo "  Restoring symlink to /tmp/resolv.conf..."
+    $ssh_cmd "rm -f /etc/resolv.conf && ln -sf /tmp/resolv.conf /etc/resolv.conf"
+    echo -e "  ${GREEN}[OK] Symlink restored${NC}"
+    return 0
+}
+
+# Install hotplug script for IPv6 exit node routing
+# OpenWrt's DHCPv6 default routes are source-constrained, so Tailscale's ULA
+# source addresses have no route to the internet. This hotplug script adds an
+# unrestricted default route in a separate table, scoped to tailscale0 only.
+configure_ipv6_routing() {
+    local ssh_cmd=$1
+
+    echo -e "${YELLOW}Configuring IPv6 exit node routing...${NC}"
+
+    local script_exists=$($ssh_cmd "[ -f /etc/hotplug.d/iface/99-tailscale-ipv6 ] && echo yes || echo no")
+
+    if [ "$script_exists" = "yes" ]; then
+        echo -e "  ${GREEN}[OK] IPv6 hotplug script already installed${NC}"
+        return 0
+    fi
+
+    $ssh_cmd "cat > /etc/hotplug.d/iface/99-tailscale-ipv6 << 'EOF'
+#!/bin/sh
+# Ensure IPv6 routing works for Tailscale exit node traffic.
+# OpenWrt's DHCPv6 default routes are source-constrained, so packets with
+# Tailscale ULA sources (fd7a:...) have no route. This adds an unrestricted
+# default route in table 100, scoped to tailscale0 traffic only.
+
+[ \"\$ACTION\" = \"ifup\" ] || exit 0
+case \"\$INTERFACE\" in wan*|brsk*) ;; *) exit 0 ;; esac
+
+GW=\$(ip -6 route show default | head -1 | awk '{print \$3}')
+DEV=\$(ip -6 route show default | head -1 | awk '{print \$5}')
+[ -n \"\$GW\" ] && [ -n \"\$DEV\" ] || exit 0
+
+ip -6 route replace default via \"\$GW\" dev \"\$DEV\" table 100 2>/dev/null
+ip -6 rule show | grep -q 'iif tailscale0 lookup 100' || \\
+    ip -6 rule add iif tailscale0 lookup 100 priority 5269 2>/dev/null
+
+logger -t tailscale-ipv6 \"Updated table 100: default via \$GW dev \$DEV\"
+EOF
+chmod +x /etc/hotplug.d/iface/99-tailscale-ipv6"
+
+    echo -e "  ${GREEN}[OK] IPv6 hotplug script installed${NC}"
+    return 0
+}
+
 # Configure sysupgrade persistence
 configure_persistence() {
     local ssh_cmd=$1
@@ -226,6 +290,7 @@ configure_persistence() {
     # Add paths to sysupgrade.conf if not present
     $ssh_cmd "grep -q '/etc/config/tailscale' /etc/sysupgrade.conf 2>/dev/null || echo '/etc/config/tailscale' >> /etc/sysupgrade.conf"
     $ssh_cmd "grep -q '/etc/tailscale/' /etc/sysupgrade.conf 2>/dev/null || echo '/etc/tailscale/' >> /etc/sysupgrade.conf"
+    $ssh_cmd "grep -q '99-tailscale-ipv6' /etc/sysupgrade.conf 2>/dev/null || echo '/etc/hotplug.d/iface/99-tailscale-ipv6' >> /etc/sysupgrade.conf"
 
     echo -e "  ${GREEN}[OK] Persistence configured${NC}"
     return 0
@@ -308,6 +373,14 @@ deploy_to_router() {
 
     # Configure firewall
     configure_firewall "$ssh_cmd"
+    echo
+
+    # Fix resolv.conf (Tailscale directManager compatibility)
+    fix_resolv_conf "$ssh_cmd"
+    echo
+
+    # Configure IPv6 exit node routing
+    configure_ipv6_routing "$ssh_cmd"
     echo
 
     # Configure persistence
