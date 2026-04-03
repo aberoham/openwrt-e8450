@@ -1,6 +1,22 @@
 OpenWrt E8450 Fleet Management - Changelog
 ==========================================
 
+2026-04-03: IPv6 Prefix Delegation Restored (DUID Fix) + DNS Cleanup
+----------------------------------------------------------------------
+- Fixed DHCPv6 prefix delegation by setting DUID to DUID-LL (type 3)
+  matching the original ISP-supplied router
+- Root cause: OpenWrt 25.12 changed DUID generation from per-interface
+  DUID-LL (type 3, MAC-derived) to a global DUID-UUID (type 4). The
+  BNG only serves PD to the DUID in its lease database, which had the
+  old DUID-LL format. This was introduced by an Oct 2025 commit and
+  affects anyone upgrading from 24.10 to 25.12.
+- Enabled masq6 on the tailscale firewall zone for IPv6 exit node
+- Disabled Tailscale MagicDNS on router (was hijacking resolv.conf
+  with SERVFAIL responses); router now uses its own dnsmasq
+- Set peerdns=0 on IPv4 WAN to ignore ISP DNS consistently
+- Upstream DNS: Google Public DNS (8.8.8.8/8.8.4.4 + IPv6 equivalents)
+- See notes/ipv6-duid-fix.md for full technical details
+
 2026-04-02: Major Upgrade to OpenWrt 25.12.2
 ---------------------------------------------
 - Upgraded both APs from OpenWrt 24.10.6 to 25.12.2
