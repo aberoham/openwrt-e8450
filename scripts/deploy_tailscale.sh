@@ -265,8 +265,11 @@ configure_ipv6_routing() {
 [ \"\$ACTION\" = \"ifup\" ] || exit 0
 case \"\$INTERFACE\" in wan*|brsk*) ;; *) exit 0 ;; esac
 
-GW=\$(ip -6 route show default | head -1 | awk '{print \$3}')
-DEV=\$(ip -6 route show default | head -1 | awk '{print \$5}')
+# Parse by keyword, not field position: source-constrained routes
+# (\"default from <prefix> via <gw> dev <dev>\") shift the awk fields.
+RT=\$(ip -6 route show default | head -1)
+GW=\$(echo \"\$RT\" | sed -n 's/.*via \\([^ ]*\\).*/\\1/p')
+DEV=\$(echo \"\$RT\" | sed -n 's/.* dev \\([^ ]*\\).*/\\1/p')
 [ -n \"\$GW\" ] && [ -n \"\$DEV\" ] || exit 0
 
 ip -6 route replace default via \"\$GW\" dev \"\$DEV\" table 100 2>/dev/null
@@ -402,7 +405,7 @@ get_lan_subnet() {
     local network=$($ssh_cmd "ip -4 addr show br-lan 2>/dev/null | grep inet | awk '{print \$2}'" | head -1)
 
     if [ -n "$network" ]; then
-        # Extract network address from CIDR (e.g., 10.19.19.1/24 -> 10.19.19.0/24)
+        # Extract network address from CIDR (e.g., 192.168.1.1/24 -> 192.168.1.0/24)
         local ip_part=$(echo "$network" | cut -d/ -f1)
         local cidr=$(echo "$network" | cut -d/ -f2)
         # Zero out the host portion for common CIDR values

@@ -1,6 +1,42 @@
 OpenWrt E8450 Fleet Management - Changelog
 ==========================================
 
+2026-08-03: Downstairs Kernel Crash #2 → pstore Recovery; Remote Syslog Added
+------------------------------------------------------------------------------
+- Downstairs router kernel-crashed ~26h after the 25.12.5 upgrade and
+  auto-diverted to recovery mode again (same mechanism as 2026-03-20:
+  kernel.panic auto-reboot + U-Boot `pstore check` → recovery initramfs)
+- Both pstore dumps corrupt again (kernel: "pstore: zlib_inflate() failed") —
+  deflate-compressed ramoops records don't survive this board's reset;
+  crash cause remains unknown. Flow offloading ruled out (not enabled).
+- Recovery: verified UBI volumes/FIT image/overlay intact, cleared pstore,
+  rebooted into production. No data loss, downtime ≈ one reboot.
+- New countermeasure: remote syslog from downstairs to upstairs
+  (syslog-ng UDP listener writing /tmp/remote-syslog/<host>.log, RAM-backed
+  on purpose — survives a sender crash without NAND wear). logd replaced by
+  syslog-ng on the receiver per the OpenWrt package design.
+- Under consideration: drop the pstore→recovery diversion from U-Boot bootcmd
+  (`run boot_ubi`) so crashes self-heal when nobody is home; remote syslog now
+  provides the diagnostics that diversion existed to preserve.
+
+2026-08-02: Firmware Upgrade 25.12.2 → 25.12.5 (+ silent sysupgrade failure RCA)
+--------------------------------------------------------------------------------
+- Upgraded both APs to 25.12.5 (kernel 6.12.74 → 6.12.94)
+- Upstairs upgraded cleanly via LuCI Attended Sysupgrade; downstairs silently
+  rebooted back into 25.12.2. Root cause: stage-2 `ubirmvol` of the `fit`
+  volume can fail EBUSY (fitblk release contention during teardown) and
+  fstools swallows the error (`|| :` in nand_upgrade_prepare_ubi), so the
+  subsequent `ubimkvol` fails and the upgrade aborts with the old image
+  intact — invisible without a serial console.
+- Workaround that succeeded: stop heavyweight services (tailscale) first,
+  then run sysupgrade from the CLI. Adopted as standard practice for the
+  gateway router.
+- Fixed a latent bug in the Tailscale IPv6 hotplug script (deploy_tailscale.sh):
+  it parsed the default route with positional awk fields, which broke on
+  source-constrained routes ("default from <prefix> via <gw>") — the exact
+  route shape it was written to handle. Now parses by via/dev keywords.
+  Confirmed working unattended on the post-upgrade boot.
+
 2026-04-03: IPv6 Prefix Delegation Restored (DUID Fix) + DNS Cleanup
 ----------------------------------------------------------------------
 - Fixed DHCPv6 prefix delegation by setting DUID to DUID-LL (type 3)

@@ -87,8 +87,8 @@ passes. No dnsmasq configuration change is needed.
 OpenWrt's DHCPv6 client (odhcp6c) creates **source-constrained** default routes:
 
 ```
-default from 2a10:d582:1cef::/48 via fe80::... dev wan metric 512
-default from 2a10:d583:0:1cf0::/64 via fe80::... dev wan metric 512
+default from 2a10:xxxx:xxxx::/48 via fe80::... dev wan metric 512
+default from 2a10:xxxx:x:xxxx::/64 via fe80::... dev wan metric 512
 ```
 
 These routes only match packets whose source address falls within the specified
