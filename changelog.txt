@@ -15,9 +15,20 @@ OpenWrt E8450 Fleet Management - Changelog
   (syslog-ng UDP listener writing /tmp/remote-syslog/<host>.log, RAM-backed
   on purpose — survives a sender crash without NAND wear). logd replaced by
   syslog-ng on the receiver per the OpenWrt package design.
-- Under consideration: drop the pstore→recovery diversion from U-Boot bootcmd
-  (`run boot_ubi`) so crashes self-heal when nobody is home; remote syslog now
-  provides the diagnostics that diversion existed to preserve.
+- APPLIED same day: dropped the pstore→recovery diversion from U-Boot bootcmd
+  on both routers (`fw_setenv bootcmd "run boot_ubi"`) so crashes self-heal
+  when nobody is home; remote syslog now provides the diagnostics the
+  diversion existed to preserve. An /etc/rc.local job archives pstore dumps
+  to /root/pstore-archive/ on the next boot, clears them, and logs a
+  user.crit alert. Verified with a clean reboot on each router. Recovery
+  image remains reachable via reset button / U-Boot menu, and boot_ubi still
+  falls back to recovery if the production image fails to load.
+  Rollback: fw_setenv bootcmd "if pstore check ; then run boot_recovery ; else run boot_ubi ; fi"
+- Crash context: house was empty, no heavy bandwidth use — weakens the
+  load-triggered theory; idle/background paths equally suspect.
+- Public repo audit: full-history scan for IPs/prefixes/MACs/keys/SSIDs
+  found only the two items sanitized at HEAD (delegated IPv6 prefixes in an
+  April note, LAN IP in a script comment); no secrets, no history rewrite.
 
 2026-08-02: Firmware Upgrade 25.12.2 → 25.12.5 (+ silent sysupgrade failure RCA)
 --------------------------------------------------------------------------------
