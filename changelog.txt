@@ -26,6 +26,14 @@ OpenWrt E8450 Fleet Management - Changelog
   Rollback: fw_setenv bootcmd "if pstore check ; then run boot_recovery ; else run boot_ubi ; fi"
 - Crash context: house was empty, no heavy bandwidth use — weakens the
   load-triggered theory; idle/background paths equally suspect.
+- Leading hypothesis after community research: marginal silicon at the
+  mt7622's lowest DVFS operating point (437.5MHz, ondemand governor) —
+  community-reported cause of idle spontaneous reboots on RT3200/E8450,
+  fixed by raising the frequency floor. Fits: idle-time crashes, one unit
+  of two identical affected, spans kernels 6.6→6.12, corrupt pstore.
+- Experiment started: pinned scaling_min_freq to 600MHz on the downstairs
+  (crashing) unit via rc.local, applied live without reboot; upstairs left
+  at stock 437.5MHz/ondemand as the control. Verdict = months of uptime.
 - Public repo audit: full-history scan for IPs/prefixes/MACs/keys/SSIDs
   found only the two items sanitized at HEAD (delegated IPv6 prefixes in an
   April note, LAN IP in a script comment); no secrets, no history rewrite.
