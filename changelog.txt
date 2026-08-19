@@ -1,6 +1,38 @@
 OpenWrt E8450 Fleet Management - Changelog
 ==========================================
 
+2026-08-19: IPv6 DNS Through the Gateway Restored (dnsmasq listen_address footgun)
+------------------------------------------------------------------------------------
+- Symptom: DNS queries to the gateway over IPv6 transport timed out entirely
+  (UDP and TCP 53 both dead). Resolution still "worked" on every dual-stack
+  client because resolvers silently fell back to the IPv4 nameserver — so the
+  only visible cost was a timeout penalty whenever a client tried the IPv6
+  server first. An IPv6-only client would have had no DNS at all.
+- Root cause: dhcp.@dnsmasq[0].listen_address was set to a hardcoded list of
+  addresses (loopback, LAN IPv4, the br-lan link-local, and the two Tailscale
+  addresses — almost certainly added by hand during the Tailscale setup).
+  When listen_address is present, dnsmasq binds ONLY those addresses,
+  overriding bind-dynamic. The list never included the LAN global IPv6
+  address — the very address odhcpd advertises to clients as their DNS
+  server via RA/DHCPv6. Adding it to the list wouldn't stick either: the
+  GUA is dynamic, derived from the ISP-delegated prefix, and changes when
+  the delegation does.
+- Fix: deleted listen_address outright and let bind-dynamic do its job —
+  dnsmasq now picks up interface addresses as they appear, including future
+  prefix changes and the Tailscale addresses the list existed to cover.
+- Open-resolver check (the reason listen_address was tempting in the first
+  place): bind-dynamic also binds the WAN addresses, which is stock OpenWrt
+  behavior. Confirmed the fw4 wan input chain has no port-53 accept and ends
+  in reject, across all WAN-side interfaces, and dnsmasq's local-service
+  (still set) refuses off-subnet queries as a second layer. Verified by
+  ruleset inspection from inside the network; an outside-in probe with
+  scripts/test_wan_exposure.sh would close the loop but hasn't been run yet.
+- Verified from a LAN client: A and AAAA lookups over IPv6 transport to the
+  gateway now resolve.
+- Red herring for the log: /etc/init.d/dnsmasq restart prints "udhcpc: no
+  lease, failing" — that's the init script probing for competing DHCP
+  servers, not DHCP breaking.
+
 2026-08-03: Downstairs Kernel Crash #2 → pstore Recovery; Remote Syslog Added
 ------------------------------------------------------------------------------
 - Downstairs router kernel-crashed ~26h after the 25.12.5 upgrade and
